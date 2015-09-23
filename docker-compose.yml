@@ -1,0 +1,41 @@
+spark_worker:
+ image: subhashni/docker-spark-worker:1.5
+ links:
+  - spark_master:spark_master
+ ports:
+ - 8888
+ - 8081
+ command: /bin/bash 
+ restart: never
+
+spark_master:
+ image: subhashni/docker-spark-master:1.5
+ ports:
+ - 7077
+ - "8080:8080"
+ command: /bin/bash
+ restart: never
+
+couchbase:
+ image: couchbase
+ ports:
+  - 8091
+  - 18091
+  - 8092
+  - 18092
+  - 8093
+  - 18093
+  - 9999
+  - 9998
+  - 9100
+  - 9101
+  - 9102
+  - 9103
+  - 9104
+  - 9105
+  - 11214
+  - 11215
+  - 11207
+  - 11210
+  - 11211
+ restart: never

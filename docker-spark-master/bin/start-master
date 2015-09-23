@@ -1,0 +1,5 @@
+#!/bin/bash
+
+source set-env
+/usr/local/spark/sbin/start-master.sh
+while true; do sleep 1000; done
