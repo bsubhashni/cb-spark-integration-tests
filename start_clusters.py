@@ -1,5 +1,7 @@
 #!/usr/bin/env/python
-import os,sys,argparse,json,subprocess,paramiko
+import os,sys,argparse,json,subprocess, paramiko
+from scp import SCPClient
+import threading
 
 spark_worker_container='spark_worker'
 spark_master_container='spark_master'
@@ -8,6 +10,8 @@ couchbase_ips = []
 spark_worker_ips = []
 spark_master_ips = []
 container_prefix = "cbspark"
+install_config_file = "config.json"
+buckets = ['default']
 
 def run_command(args):
 	p = subprocess.Popen(args)
@@ -16,7 +20,7 @@ def run_command(args):
 		print '{0} failed with exit status'.format(p.returncode)
 		os._exit(1)
 
-def get_ips(cb_nodes, spark_workers):
+def get_ips_and_configure(cb_nodes, spark_workers, download_url):
 	for i in range(1, int(cb_nodes) + 1):
 		container_id = "{0}_{1}_{2}".format(container_prefix, couchbase_container, i)
 		args = ["docker", "inspect", "--format='{{.NetworkSettings.IPAddress}}'", container_id]
@@ -41,23 +45,34 @@ def get_ips(cb_nodes, spark_workers):
 		out, err = process.communicate()
 		spark_master_ips.append(out.rstrip())
 
-	with open("config.ini", "w+") as f:
-		f.write("[global]\n")
-		f.write("username:root\n")
-		f.write("password:couchbase\n")
-		f.write("[servers]\n")
-		f.write("port:8091\n")
-		for i  in range(1, int(cb_nodes) + 1):
-			f.write("{0}:{1}\n".format(i, couchbase_ips[i-1]))
-		f.write("[membase]\n")
-		f.write("rest_username:Administrator\n")
-		f.write("rest_username:password\n")
+	with open(install_config_file, "w+") as f:
+		f.write("{\n")
+		f.write("\"couchbase\":{0},\n".format(couchbase_ips))
+		f.write("\"spark-master\":{0},\n".format(spark_worker_ips))
+		f.write("\"spark-worker\":{0}\n".format(spark_master_ips))
+		f.write("}")
 
-def setup_couchbase_cluster(version):
-	args = ["git", "clone", "https://github.com/couchbase/testrunner.git" ]
-	run_command(args)
-	args = ["python" , "scripts/install.py", "-p", "product=cb,version={0}".format(version)]
-	run_command(args)
+	tasks = []
+	for i in range(0, int(cb_nodes)):
+		task = threading.Thread(target=install_couchbase, args=(couchbase_ips[i],download_url,))
+		task.start()
+		tasks.append(task)
+
+	[task.join() for task in tasks]
+
+def install_couchbase(ip, url):
+	client = paramiko.SSHClient()
+	client.load_system_host_keys()
+	client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+	client.connect(ip, username="root", password="root")
+	scp = SCPClient(client.get_transport())
+	scp.put('cluster-install.py', 'cluster-install.py')
+	command = "python cluster-install.py {0}".format(url)
+	print command
+	(stdin, stdout, stderr) = client.exec_command(command)
+	for line in stdout.readlines():
+		print line
+	client.close()
 
 def start_environment(cbnodes, sparkworkers):
 	cb_args = "couchbase_base={0}".format(cbnodes)
@@ -69,14 +84,11 @@ def cleanup_environment():
 	args = ["python", "stop_cluster.py"]
 	run_command(args)
 
-
 parser = argparse.ArgumentParser(description='Setup couchbase and spark clusters. Currently supports one spark master')
-parser.add_argument('--couchbase-nodes', dest='cbnodes', required=True, help='Number of couchbase nodes in cb cluster')
+parser.add_argument('--cb-nodes', dest='cbnodes', required=True, help='Number of couchbase nodes in cb cluster')
 parser.add_argument('--spark-workers', dest='sparkworkers', required=True, help='Number of spark workers in spark cluster')
-parser.add_argument('--cb-version', dest='cbversion', default='4.0.0.-4057', help='Couchbase-server version')
-
+parser.add_argument('--url', dest='url', required=True, help='Couchbase-server version')
 args = parser.parse_args()
 cleanup_environment()
 start_environment(args.cbnodes, args.sparkworkers)
-get_ips(args.cbnodes, args.sparkworkers)
-#setup_couchbase_cluster(args.cbversion)
+get_ips_and_configure(args.cbnodes, args.sparkworkers, args.url)
