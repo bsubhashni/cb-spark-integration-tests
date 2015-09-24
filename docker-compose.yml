@@ -16,8 +16,8 @@ spark_master:
  command: /bin/bash
  restart: never
 
-couchbase:
- image: couchbase
+couchbase_base:
+ image: rastasheep/ubuntu-sshd:14.04
  ports:
   - 8091
   - 18091
