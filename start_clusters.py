@@ -25,7 +25,6 @@ def get_ips_and_configure(cb_nodes, spark_workers, download_url):
 	for i in range(1, int(cb_nodes) + 1):
 		container_id = "{0}_{1}_{2}".format(container_prefix, couchbase_container, i)
 		args = ["docker", "inspect", "--format='{{.NetworkSettings.IPAddress}}'", container_id]
-		print args
 		process = subprocess.Popen(args, stdout=subprocess.PIPE)
 		out, err = process.communicate()
 		couchbase_ips.append(out.rstrip())
@@ -33,7 +32,6 @@ def get_ips_and_configure(cb_nodes, spark_workers, download_url):
 	for i in range(1, int(spark_workers) + 1):
 		container_id = "{0}_{1}_{2}".format(container_prefix, spark_worker_container, i)
 		args = ["docker", "inspect", "--format='{{.NetworkSettings.IPAddress}}'", container_id]
-		print args
 		process = subprocess.Popen(args, stdout=subprocess.PIPE)
 		out, err = process.communicate()
 		spark_worker_ips.append(out.rstrip())
@@ -41,12 +39,11 @@ def get_ips_and_configure(cb_nodes, spark_workers, download_url):
 	for i in range(1, 2):
 		container_id = "{0}_{1}_{2}".format(container_prefix, spark_master_container, i)
 		args = ["docker", "inspect", "--format='{{.NetworkSettings.IPAddress}}'", container_id]
-		print args
 		process = subprocess.Popen(args, stdout=subprocess.PIPE)
 		out, err = process.communicate()
 		spark_master_ips.append(out.rstrip())
 
-	cluster_config = json.dumps({"couchbase" : couchbase_ips, "spark-worker" : spark_worker_ips, "spark_master" : spark_master_ips })
+	cluster_config = json.dumps({"couchbase" : couchbase_ips, "spark-worker" : spark_worker_ips, "spark-master" : spark_master_ips })
 
 	with open(cluster_config_file, "w+") as f:
 		f.write(cluster_config)
@@ -106,12 +103,16 @@ def initialize_nodes_rebalance(nodes):
 		print line
 
 	if len(nodes) > 1:
-		server_add = ' '
-		for i in (1, len(nodes)):
-			server_add = server_add.join(' --server-add={0}:port '.format(nodes[i]))
+		server_add = ''
+		for i in range(1, len(nodes)):
+			print i
+			print nodes[i]
+			server_add += (" --server-add={0}:8091 --server-add-username=Administrator --server-add-password=password"
+						   " --services=data,index,query".format(nodes[i]))
 
-		command = ("/opt/couchbase/bin/couchbase-cli rebalance {0}"
-					"--server-add-username=Administrator --server-add-password=password".format(server_add))
+		command = ("/opt/couchbase/bin/couchbase-cli rebalance -c 127.0.0.1:8091 {0} -u Administrator -p password"
+					" ".format(server_add))
+		print command
 		(stdin, stdout, stderr) = masterClient.exec_command(command)
 		for line in stdout.readlines():
 			print line
@@ -119,7 +120,7 @@ def initialize_nodes_rebalance(nodes):
 def start_environment(cbnodes, sparkworkers):
 	cb_args = "couchbase_base={0}".format(cbnodes)
 	spark_worker_args = "spark_worker={0}".format(sparkworkers)
-	args = ["docker-compose", "-p={0}".format(container_prefix), "scale", cb_args, spark_worker_args, "spark_master=1"]
+	args = ["docker-compose", "-p={0}".format(container_prefix), "scale", cb_args,  "spark_master=1",  spark_worker_args]
 	run_command(args)
 
 def cleanup_environment():
