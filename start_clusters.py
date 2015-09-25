@@ -1,7 +1,6 @@
 #!/usr/bin/env/python
-import os,sys,argparse,json,subprocess, paramiko
+import os,sys,argparse,json,subprocess,paramiko,requests,time,threading
 from scp import SCPClient
-import threading
 
 spark_worker_container='spark_worker'
 spark_master_container='spark_master'
@@ -10,8 +9,10 @@ couchbase_ips = []
 spark_worker_ips = []
 spark_master_ips = []
 container_prefix = "cbspark"
-install_config_file = "config.json"
+cluster_config_file = "config.json"
 buckets = ['default']
+masterIp = None
+masterClient = None
 
 def run_command(args):
 	p = subprocess.Popen(args)
@@ -45,34 +46,75 @@ def get_ips_and_configure(cb_nodes, spark_workers, download_url):
 		out, err = process.communicate()
 		spark_master_ips.append(out.rstrip())
 
-	with open(install_config_file, "w+") as f:
-		f.write("{\n")
-		f.write("\"couchbase\":{0},\n".format(couchbase_ips))
-		f.write("\"spark-master\":{0},\n".format(spark_worker_ips))
-		f.write("\"spark-worker\":{0}\n".format(spark_master_ips))
-		f.write("}")
+	cluster_config = json.dumps({"couchbase" : couchbase_ips, "spark-worker" : spark_worker_ips, "spark_master" : spark_master_ips })
+
+	with open(cluster_config_file, "w+") as f:
+		f.write(cluster_config)
 
 	tasks = []
+
+	lock = threading.Lock()
 	for i in range(0, int(cb_nodes)):
-		task = threading.Thread(target=install_couchbase, args=(couchbase_ips[i],download_url,))
+		isMaster = False
+		if i == 0:
+			isMaster = True
+		task = threading.Thread(target=install_couchbase, args=(couchbase_ips[i],download_url, isMaster))
 		task.start()
 		tasks.append(task)
-
 	[task.join() for task in tasks]
 
-def install_couchbase(ip, url):
+	time.sleep(10)
+	for i in range(0, int(cb_nodes)):
+		r = requests.get("http://{0}:8091/pools".format(couchbase_ips[i]))
+		if r.status_code != 200:
+			print "Server not installed correctly. Received status code:".format(r.status_code)
+			os._exit(1)
+	initialize_nodes_rebalance(couchbase_ips)
+
+def install_couchbase(ip, url, isMaster):
 	client = paramiko.SSHClient()
 	client.load_system_host_keys()
 	client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 	client.connect(ip, username="root", password="root")
 	scp = SCPClient(client.get_transport())
+	if isMaster == True:
+		global masterClient
+		masterClient = client
+		global masterIp
+		masterIp = ip
+	scp = SCPClient(client.get_transport())
 	scp.put('cluster-install.py', 'cluster-install.py')
 	command = "python cluster-install.py {0}".format(url)
-	print command
 	(stdin, stdout, stderr) = client.exec_command(command)
 	for line in stdout.readlines():
 		print line
-	client.close()
+	if isMaster != True:
+		client.close()
+
+def initialize_nodes_rebalance(nodes):
+	print masterClient
+	command = ("/opt/couchbase/bin/couchbase-cli cluster-init -c 127.0.0.1:8091 "
+				   "--cluster-init-username=Administrator --cluster-init-password=password --cluster-init-ramsize=512")
+	(stdin, stdout, stderr) = masterClient.exec_command(command)
+	for line in stdout.readlines():
+		print line
+
+	command = ("/opt/couchbase/bin/couchbase-cli bucket-create -c 127.0.0.1:8091 "
+					"-u Administrator -p password --bucket=default -c localhost:8091 --bucket-ramsize=512")
+	(stdin, stdout, stderr) = masterClient.exec_command(command)
+	for line in stdout.readlines():
+		print line
+
+	if len(nodes) > 1:
+		server_add = ' '
+		for i in (1, len(nodes)):
+			server_add = server_add.join(' --server-add={0}:port '.format(nodes[i]))
+
+		command = ("/opt/couchbase/bin/couchbase-cli rebalance {0}"
+					"--server-add-username=Administrator --server-add-password=password".format(server_add))
+		(stdin, stdout, stderr) = masterClient.exec_command(command)
+		for line in stdout.readlines():
+			print line
 
 def start_environment(cbnodes, sparkworkers):
 	cb_args = "couchbase_base={0}".format(cbnodes)
@@ -81,7 +123,7 @@ def start_environment(cbnodes, sparkworkers):
 	run_command(args)
 
 def cleanup_environment():
-	args = ["python", "stop_cluster.py"]
+	args = ["python", "stop_cluster.py", "--prefix={0}".format(container_prefix)]
 	run_command(args)
 
 parser = argparse.ArgumentParser(description='Setup couchbase and spark clusters. Currently supports one spark master')
