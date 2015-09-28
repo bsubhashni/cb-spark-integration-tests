@@ -1,1 +1,4 @@
 *.sw*
+project/cb-spark-connector-tests/project/target/*
+project/cb-spark-connector-tests/target/*
+project/cb-spark-connector-tests/.idea/libraries/*

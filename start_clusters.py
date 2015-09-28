@@ -60,12 +60,13 @@ def get_ips_and_configure(cb_nodes, spark_workers, download_url):
 		tasks.append(task)
 	[task.join() for task in tasks]
 
-	time.sleep(10)
+	time.sleep(20) #install should not take longer than this - use a better way
 	for i in range(0, int(cb_nodes)):
 		r = requests.get("http://{0}:8091/pools".format(couchbase_ips[i]))
 		if r.status_code != 200:
 			print "Server not installed correctly. Received status code:".format(r.status_code)
 			os._exit(1)
+
 	initialize_nodes_rebalance(couchbase_ips)
 
 def install_couchbase(ip, url, isMaster):
