@@ -92,7 +92,8 @@ def install_couchbase(ip, url, isMaster):
 def initialize_nodes_rebalance(nodes):
 	print masterClient
 	command = ("/opt/couchbase/bin/couchbase-cli cluster-init -c 127.0.0.1:8091 "
-				   "--cluster-init-username=Administrator --cluster-init-password=password --cluster-init-ramsize=512")
+				   "--cluster-init-username=Administrator --cluster-init-password=password --cluster-init-ramsize=512 "
+				   "--services=data,index,query")
 	(stdin, stdout, stderr) = masterClient.exec_command(command)
 	for line in stdout.readlines():
 		print line

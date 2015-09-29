@@ -1,21 +1,20 @@
 import com.couchbase.client.java.PersistTo;
 import com.couchbase.client.java.document.JsonDocument;
-import com.couchbase.client.java.CouchbaseCluster;
 import java.util.Arrays;
 import java.util.List;
 import com.couchbase.spark.java.CouchbaseSparkContext;
-import com.couchbase.client.java.CouchbaseCluster;
-import com.couchbase.client.java.document.JsonDocument;
 import com.couchbase.client.java.document.json.JsonObject;
 import com.couchbase.client.java.Bucket;
 /**
  * Created by Subhashni on 9/28/15.
  */
 public class KVWorkload implements Runnable {
-    public static String key_prefix = "TestKey";
-    public static String value_prefix = "TestValue";
-    public static CouchbaseSparkContext csc = null;
-    public static Bucket couchbaseBucket = null;
+    private String key_prefix = "TestKey";
+    private String value_prefix = "TestValue";
+    private CouchbaseSparkContext csc = null;
+    private Bucket couchbaseBucket = null;
+    private boolean shouldRun = true;
+    private int waitTime = 1000;
 
     public KVWorkload (Bucket couchbaseBucket, CouchbaseSparkContext csc) {
         this.csc = csc;
@@ -24,16 +23,31 @@ public class KVWorkload implements Runnable {
 
     public void run() {
         int i= 0;
-        while(true) {
+        while(this.shouldRun) {
             String key = key_prefix + i;
             JsonObject obj = JsonObject.create();
             obj.put("Value", value_prefix+i);
-            this.couchbaseBucket.insert(JsonDocument.create(key,obj), PersistTo.MASTER);
+            this.couchbaseBucket.upsert(JsonDocument.create(key, obj), PersistTo.MASTER);
             List<JsonDocument> docs = this.csc
                     .couchbaseGet(Arrays.asList(key))
                     .collect();
+            try {
+                Thread.sleep(waitTime);
+            } catch(InterruptedException ex) {
+                System.out.print("Exception on KVWorkload thread" + ex.getMessage());
+                System.exit(1);
+            }
             assert(docs.size() == 1);
+            i++;
         }
+    }
+
+    public void initialize() {
+        this.shouldRun = true;
+    }
+
+    public void stop() {
+        this.shouldRun = false;
     }
 
 }

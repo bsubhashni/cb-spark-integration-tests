@@ -1,13 +1,8 @@
-import com.couchbase.client.java.Bucket;
-import com.couchbase.client.java.CouchbaseCluster;
-import com.couchbase.client.java.Cluster;
+import com.couchbase.client.java.*;
 import com.couchbase.client.java.Bucket;
 import com.couchbase.client.java.env.CouchbaseEnvironment;
 import com.couchbase.client.java.env.DefaultCouchbaseEnvironment;
-import com.couchbase.client.java.query.Query;
 import com.couchbase.spark.java.CouchbaseSparkContext;
-import com.couchbase.spark.rdd.CouchbaseQueryRow;
-import com.couchbase.spark.rdd.KeyValuePartition;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonArray;
@@ -28,9 +23,9 @@ public class TRUN {
     ArrayList<String> couchbaseNodes = new ArrayList<>();
     ArrayList<String> sparkWorkerNodes = new ArrayList<>();
     ArrayList<String> sparkMasterNodes = new ArrayList<>();
-    Bucket bucket = null;
+    public Bucket bucket = null;
     CouchbaseSparkContext csc = null;
-    JavaSparkContext sc = null;
+    public JavaSparkContext sc = null;
 
     public void Initialize() {
         readConfig();
@@ -90,16 +85,28 @@ public class TRUN {
                 .builder()
                 .queryEnabled(false)
                 .connectTimeout(20)
+                .kvTimeout(20)
                 .build();
 
         Cluster cluster = CouchbaseCluster.create(couchbaseNodes.get(0));
         this.bucket = cluster.openBucket();
     }
 
+    void runTests() {
+        CouchbaseAdmin admin = new CouchbaseAdmin(this.couchbaseNodes.get(0), "root", "root");
+        Tests t = new Tests(this.bucket, this.csc, this.couchbaseNodes.toArray(new String[this.couchbaseNodes.size()]), admin);
+        t.TestN1QLRebalanceOut();
+    }
+
+    void shutDown() {
+        this.sc.stop();
+        this.bucket.close();
+    }
+
     public static void main(String[] args) {
         TRUN trun = new TRUN();
         trun.Initialize();
-        RebalanceTests rb = new RebalanceTests(trun.bucket, trun.csc, trun.couchbaseNodes.toArray(new String[trun.couchbaseNodes.size()]));
-        rb.TestKVRebalanceOut();
+        trun.runTests();
+        trun.shutDown();
     }
 }
