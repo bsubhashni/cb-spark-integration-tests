@@ -29,9 +29,9 @@ public class CouchbaseAdmin {
         this.execChannel.setCommand(command.getBytes());
         try {
             InputStream stdin = this.execChannel.getInputStream();
-
             this.execChannel.connect();
             byte[] tmp=new byte[1024];
+            Thread.sleep(5000);
             while(true){
                 while(stdin.available()>0){
                     int i=stdin.read(tmp, 0, 1024);

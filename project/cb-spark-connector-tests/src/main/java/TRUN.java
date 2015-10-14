@@ -7,7 +7,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonArray;
 import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 
 import java.util.ArrayList;
 import static com.couchbase.spark.java.CouchbaseSparkContext.couchbaseContext;
@@ -16,6 +15,7 @@ import java.nio.file.Paths;
 import java.nio.file.Files;
 import java.io.IOException;
 import com.google.gson.Gson;
+import org.apache.spark.SparkContext;
 /**
  * Created by Subhashni on 9/28/15.
  */
@@ -25,7 +25,7 @@ public class TRUN {
     ArrayList<String> sparkMasterNodes = new ArrayList<>();
     public Bucket bucket = null;
     CouchbaseSparkContext csc = null;
-    public JavaSparkContext sc = null;
+    public SparkContext sc = null;
 
     public void Initialize() {
         readConfig();
@@ -68,7 +68,7 @@ public class TRUN {
                 .set("com.couchbase.nodes", couchbaseNodes.get(0).toString());
 
 
-        this.sc = new JavaSparkContext(conf);
+        this.sc = new SparkContext(conf);
         this.csc = couchbaseContext(sc);
 
         //Add jars so we dont run into class not found exceptions on the worker
@@ -83,7 +83,6 @@ public class TRUN {
     void createBucketConnection() {
         CouchbaseEnvironment env = DefaultCouchbaseEnvironment
                 .builder()
-                .queryEnabled(false)
                 .connectTimeout(20)
                 .kvTimeout(20)
                 .build();
@@ -94,8 +93,8 @@ public class TRUN {
 
     void runTests() {
         CouchbaseAdmin admin = new CouchbaseAdmin(this.couchbaseNodes.get(0), "root", "root");
-        Tests t = new Tests(this.bucket, this.csc, this.couchbaseNodes.toArray(new String[this.couchbaseNodes.size()]), admin);
-        t.TestN1QLRebalanceOut();
+        Tests t = new Tests(this.bucket, this.sc, this.couchbaseNodes.toArray(new String[this.couchbaseNodes.size()]), admin);
+        t.TestKVRebalanceOut();
     }
 
     void shutDown() {

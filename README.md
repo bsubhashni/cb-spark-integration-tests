@@ -6,4 +6,5 @@
 	* python modules
 		* paramiko
 		* scp
-  
+
+Configuration  
