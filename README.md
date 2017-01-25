@@ -1,5 +1,4 @@
-# cb-spark-kafka-integration
-
+# cb-spark-integration
 * Dependencies:
 	* docker
 	* docker-compose
